@@ -282,21 +282,6 @@ func TestWaitForDeletion(t *testing.T) {
 			},
 		},
 		{
-			name:  "handles no infos",
-			infos: []*resource.Info{},
-			fakeClient: func() *dynamicfakeclient.FakeDynamicClient {
-				return dynamicfakeclient.NewSimpleDynamicClient(scheme)
-			},
-			timeout:     10 * time.Second,
-			expectedErr: errNoMatchingResources.Error(),
-
-			validateActions: func(t *testing.T, actions []clienttesting.Action) {
-				if len(actions) != 0 {
-					t.Fatal(spew.Sdump(actions))
-				}
-			},
-		},
-		{
 			name: "uid conflict on get",
 			infos: []*resource.Info{
 				{
@@ -588,9 +573,9 @@ func TestWaitForDeletion(t *testing.T) {
 				DynamicClient:  fakeClient,
 				Timeout:        test.timeout,
 
-				Printer:     printers.NewDiscardingPrinter(),
-				ConditionFn: IsDeleted,
-				IOStreams:   genericclioptions.NewTestIOStreamsDiscard(),
+				Printer:   printers.NewDiscardingPrinter(),
+				Waiter:    *NewDeletionWaiter(),
+				IOStreams: genericclioptions.NewTestIOStreamsDiscard(),
 			}
 			err := o.RunWait()
 			switch {
@@ -1090,9 +1075,9 @@ func TestWaitForCondition(t *testing.T) {
 				DynamicClient:  fakeClient,
 				Timeout:        test.timeout,
 
-				Printer:     printers.NewDiscardingPrinter(),
-				ConditionFn: ConditionalWait{conditionName: "the-condition", conditionStatus: "status-value", errOut: ioutil.Discard}.IsConditionMet,
-				IOStreams:   genericclioptions.NewTestIOStreamsDiscard(),
+				Printer:   printers.NewDiscardingPrinter(),
+				Waiter:    *NewConditionalWaiter("the-condition", "status-value", ioutil.Discard),
+				IOStreams: genericclioptions.NewTestIOStreamsDiscard(),
 			}
 			err := o.RunWait()
 			switch {
@@ -1124,9 +1109,8 @@ func TestWaitForDeletionIgnoreNotFound(t *testing.T) {
 		ResourceFinder: genericclioptions.NewSimpleFakeResourceFinder(infos...),
 		DynamicClient:  fakeClient,
 		Printer:        printers.NewDiscardingPrinter(),
-		ConditionFn:    IsDeleted,
+		Waiter:         *NewDeletionWaiter(),
 		IOStreams:      genericclioptions.NewTestIOStreamsDiscard(),
-		ForCondition:   "delete",
 	}
 	err := o.RunWait()
 	if err != nil {
@@ -1307,11 +1291,8 @@ func TestWaitForDifferentJSONPathExpression(t *testing.T) {
 				DynamicClient:  fakeClient,
 				Timeout:        1 * time.Millisecond,
 
-				Printer: printers.NewDiscardingPrinter(),
-				ConditionFn: JSONPathWait{
-					jsonPathCondition: test.jsonPathCond,
-					jsonPathParser:    j,
-					errOut:            ioutil.Discard}.IsJSONPathConditionMet,
+				Printer:   printers.NewDiscardingPrinter(),
+				Waiter:    *NewJSONPathWaiter(test.jsonPathCond, j, ioutil.Discard),
 				IOStreams: genericclioptions.NewTestIOStreamsDiscard(),
 			}
 
@@ -1660,10 +1641,8 @@ func TestWaitForJSONPathCondition(t *testing.T) {
 				DynamicClient:  fakeClient,
 				Timeout:        test.timeout,
 
-				Printer: printers.NewDiscardingPrinter(),
-				ConditionFn: JSONPathWait{
-					jsonPathCondition: test.jsonPathCond,
-					jsonPathParser:    j, errOut: ioutil.Discard}.IsJSONPathConditionMet,
+				Printer:   printers.NewDiscardingPrinter(),
+				Waiter:    *NewJSONPathWaiter(test.jsonPathCond, j, ioutil.Discard),
 				IOStreams: genericclioptions.NewTestIOStreamsDiscard(),
 			}
 
