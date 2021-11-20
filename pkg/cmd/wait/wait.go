@@ -170,7 +170,7 @@ func (flags *WaitFlags) ToOptions(args []string) (*WaitOptions, error) {
 		DynamicClient:  dynamicClient,
 		Timeout:        effectiveTimeout,
 		Printer:        printer,
-		Waiter:         *waiter,
+		Waiter:         waiter,
 		IOStreams:      flags.IOStreams,
 	}
 
@@ -205,13 +205,14 @@ type WaitOptions struct {
 // RunWait runs the waiting logic
 func (o *WaitOptions) RunWait() error {
 	visitCount := 0
-	visitFunc := func(info *resource.Info, err error) error {
+
+	err := o.ResourceFinder.Do().Visit(func(info *resource.Info, err error) error {
 		if err != nil {
 			return err
 		}
 
 		visitCount++
-		finalObject, success, err := o.Waiter.ConditionFn(info, o)
+		finalObject, success, err := o.Waiter.VisitResource(info, o)
 		if success {
 			o.Printer.PrintObj(finalObject, o.Out)
 			return nil
@@ -220,22 +221,9 @@ func (o *WaitOptions) RunWait() error {
 			return fmt.Errorf("%v unsatisified for unknown reason", finalObject)
 		}
 		return err
-	}
-	visitor := o.ResourceFinder.Do()
-	if visitor, ok := visitor.(*resource.Result); ok {
-		for _, errFn := range o.Waiter.IgnoreErrorFns {
-			visitor.IgnoreErrors(errFn)
-		}
-	}
+	})
 
-	err := visitor.Visit(visitFunc)
-	if err != nil {
-		return err
-	} else if visitCount == 0 && !o.Waiter.AllowNoResources {
-		return errNoMatchingResources
-	} else {
-		return nil
-	}
+	return o.Waiter.OnWaitLoopCompletion(visitCount, err)
 }
 
 type isCondMetFunc func(event watch.Event) (bool, error)

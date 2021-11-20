@@ -15,18 +15,15 @@ import (
 	"time"
 )
 
-func NewDeletionWaiter() *Waiter {
-	return &Waiter{
-		ConditionFn: IsDeleted,
-		IgnoreErrorFns: []resource.ErrMatchFunc{
-			apierrors.IsNotFound,
-		},
-		AllowNoResources: true,
-	}
+type DeletionWaiter struct {
+	errOut io.Writer
 }
 
-// IsDeleted is a condition func for waiting for something to be deleted
-func IsDeleted(info *resource.Info, o *WaitOptions) (runtime.Object, bool, error) {
+func NewDeletionWaiter(errOut io.Writer) Waiter {
+	return DeletionWaiter{errOut}
+}
+
+func (d DeletionWaiter) VisitResource(info *resource.Info, o *WaitOptions) (runtime.Object, bool, error) {
 	endTime := time.Now().Add(o.Timeout)
 	for {
 		if len(info.Name) == 0 {
@@ -75,7 +72,7 @@ func IsDeleted(info *resource.Info, o *WaitOptions) (runtime.Object, bool, error
 		}
 
 		ctx, cancel := watch.ContextWithOptionalTimeout(context.Background(), o.Timeout)
-		watchEvent, err := watch.UntilWithoutRetry(ctx, objWatch, Wait{errOut: o.ErrOut}.IsDeleted)
+		watchEvent, err := watch.UntilWithoutRetry(ctx, objWatch, d.IsDeleted)
 		cancel()
 		switch {
 		case err == nil:
@@ -93,19 +90,22 @@ func IsDeleted(info *resource.Info, o *WaitOptions) (runtime.Object, bool, error
 	}
 }
 
-// Wait has helper methods for handling watches, including error handling.
-type Wait struct {
-	errOut io.Writer
+func (d DeletionWaiter) OnWaitLoopCompletion(visitedCount int, err error) error {
+	if apierrors.IsNotFound(err) || err == nil {
+		return nil
+	} else {
+		return err
+	}
 }
 
 // IsDeleted returns true if the object is deleted. It prints any errors it encounters.
-func (w Wait) IsDeleted(event watch2.Event) (bool, error) {
+func (d DeletionWaiter) IsDeleted(event watch2.Event) (bool, error) {
 	switch event.Type {
 	case watch2.Error:
 		// keep waiting in the event we see an error - we expect the watch to be closed by
 		// the server if the error is unrecoverable.
 		err := apierrors.FromObject(event.Object)
-		fmt.Fprintf(w.errOut, "error: An error occurred while waiting for the object to be deleted: %v", err)
+		fmt.Fprintf(d.errOut, "error: An error occurred while waiting for the object to be deleted: %v", err)
 		return false, nil
 	case watch2.Deleted:
 		return true, nil

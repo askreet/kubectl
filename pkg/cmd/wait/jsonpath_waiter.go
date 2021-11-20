@@ -14,23 +14,43 @@ import (
 	"strings"
 )
 
-// JSONPathWait holds a JSONPath Parser which has the ability
+// JSONPathWaiter holds a JSONPath Parser which has the ability
 // to check for the JSONPath condition and compare with the API server provided JSON output.
-type JSONPathWait struct {
+type JSONPathWaiter struct {
 	jsonPathCondition string
 	jsonPathParser    *jsonpath.JSONPath
 	// errOut is written to if an error occurs
 	errOut io.Writer
 }
 
-// IsJSONPathConditionMet fulfills the requirements of the interface ConditionFunc which provides condition check
-func (j JSONPathWait) IsJSONPathConditionMet(info *resource.Info, o *WaitOptions) (runtime.Object, bool, error) {
+func NewJSONPathWaiter(jsonPathCond string, j *jsonpath.JSONPath, errOut io.Writer) Waiter {
+	return &JSONPathWaiter{
+		jsonPathCondition: jsonPathCond,
+		jsonPathParser:    j,
+		errOut:            errOut,
+	}
+}
+
+func (j JSONPathWaiter) VisitResource(info *resource.Info, o *WaitOptions) (runtime.Object, bool, error) {
 	return getObjAndCheckCondition(info, o, j.isJSONPathConditionMet, j.checkCondition)
 }
 
+// IsJSONPathConditionMet fulfills the requirements of the interface ConditionFunc which provides condition check
+//func (j JSONPathWaiter) IsJSONPathConditionMet(info *resource.Info, o *WaitOptions) (runtime.Object, bool, error) {
+//	return getObjAndCheckCondition(info, o, j.isJSONPathConditionMet, j.checkCondition)
+//}
+
+func (j JSONPathWaiter) OnWaitLoopCompletion(visitedCount int, err error) error {
+	if visitedCount == 0 {
+		return errNoMatchingResources
+	} else {
+		return err
+	}
+}
+
 // isJSONPathConditionMet is a helper function of IsJSONPathConditionMet
-// which check the watch event and check if a JSONPathWait condition is met
-func (j JSONPathWait) isJSONPathConditionMet(event watch.Event) (bool, error) {
+// which check the watch event and check if a JSONPathWaiter condition is met
+func (j JSONPathWaiter) isJSONPathConditionMet(event watch.Event) (bool, error) {
 	if event.Type == watch.Error {
 		// keep waiting in the event we see an error - we expect the watch to be closed by
 		// the server
@@ -50,7 +70,7 @@ func (j JSONPathWait) isJSONPathConditionMet(event watch.Event) (bool, error) {
 
 // checkCondition uses JSONPath parser to parse the JSON received from the API server
 // and check if it matches the desired condition
-func (j JSONPathWait) checkCondition(obj *unstructured.Unstructured) (bool, error) {
+func (j JSONPathWaiter) checkCondition(obj *unstructured.Unstructured) (bool, error) {
 	queryObj := obj.UnstructuredContent()
 	parseResults, err := j.jsonPathParser.FindResults(queryObj)
 	if err != nil {
@@ -95,14 +115,4 @@ func compareResults(r reflect.Value, expectedVal string) (bool, error) {
 	}
 	s := fmt.Sprintf("%v", r.Interface())
 	return strings.TrimSpace(s) == strings.TrimSpace(expectedVal), nil
-}
-
-func NewJSONPathWaiter(jsonPathCond string, j *jsonpath.JSONPath, errOut io.Writer) *Waiter {
-	return &Waiter{
-		ConditionFn: JSONPathWait{
-			jsonPathCondition: jsonPathCond,
-			jsonPathParser:    j,
-			errOut:            errOut,
-		}.IsJSONPathConditionMet,
-	}
 }

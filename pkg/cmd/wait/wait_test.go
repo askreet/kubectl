@@ -574,7 +574,7 @@ func TestWaitForDeletion(t *testing.T) {
 				Timeout:        test.timeout,
 
 				Printer:   printers.NewDiscardingPrinter(),
-				Waiter:    *NewDeletionWaiter(),
+				Waiter:    NewDeletionWaiter(ioutil.Discard),
 				IOStreams: genericclioptions.NewTestIOStreamsDiscard(),
 			}
 			err := o.RunWait()
@@ -1076,7 +1076,7 @@ func TestWaitForCondition(t *testing.T) {
 				Timeout:        test.timeout,
 
 				Printer:   printers.NewDiscardingPrinter(),
-				Waiter:    *NewConditionalWaiter("the-condition", "status-value", ioutil.Discard),
+				Waiter:    NewConditionalWaiter("the-condition", "status-value", ioutil.Discard),
 				IOStreams: genericclioptions.NewTestIOStreamsDiscard(),
 			}
 			err := o.RunWait()
@@ -1109,7 +1109,7 @@ func TestWaitForDeletionIgnoreNotFound(t *testing.T) {
 		ResourceFinder: genericclioptions.NewSimpleFakeResourceFinder(infos...),
 		DynamicClient:  fakeClient,
 		Printer:        printers.NewDiscardingPrinter(),
-		Waiter:         *NewDeletionWaiter(),
+		Waiter:         NewDeletionWaiter(ioutil.Discard),
 		IOStreams:      genericclioptions.NewTestIOStreamsDiscard(),
 	}
 	err := o.RunWait()
@@ -1292,7 +1292,7 @@ func TestWaitForDifferentJSONPathExpression(t *testing.T) {
 				Timeout:        1 * time.Millisecond,
 
 				Printer:   printers.NewDiscardingPrinter(),
-				Waiter:    *NewJSONPathWaiter(test.jsonPathCond, j, ioutil.Discard),
+				Waiter:    NewJSONPathWaiter(test.jsonPathCond, j, ioutil.Discard),
 				IOStreams: genericclioptions.NewTestIOStreamsDiscard(),
 			}
 
@@ -1642,7 +1642,7 @@ func TestWaitForJSONPathCondition(t *testing.T) {
 				Timeout:        test.timeout,
 
 				Printer:   printers.NewDiscardingPrinter(),
-				Waiter:    *NewJSONPathWaiter(test.jsonPathCond, j, ioutil.Discard),
+				Waiter:    NewJSONPathWaiter(test.jsonPathCond, j, ioutil.Discard),
 				IOStreams: genericclioptions.NewTestIOStreamsDiscard(),
 			}
 

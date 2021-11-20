@@ -11,30 +11,35 @@ import (
 	"strings"
 )
 
-func NewConditionalWaiter(name, value string, errOut io.Writer) *Waiter {
-	return &Waiter{
-		ConditionFn: ConditionalWait{
-			conditionName:   name,
-			conditionStatus: value,
-			errOut:          errOut,
-		}.IsConditionMet,
-	}
-}
-
-// ConditionalWait hold information to check an API status condition
-type ConditionalWait struct {
+// ConditionalWaiter hold information to check an API status condition
+type ConditionalWaiter struct {
 	conditionName   string
 	conditionStatus string
 	// errOut is written to if an error occurs
 	errOut io.Writer
 }
 
-// IsConditionMet is a conditionfunc for waiting on an API condition to be met
-func (w ConditionalWait) IsConditionMet(info *resource.Info, o *WaitOptions) (runtime.Object, bool, error) {
+func NewConditionalWaiter(name, value string, errOut io.Writer) Waiter {
+	return ConditionalWaiter{
+		conditionName:   name,
+		conditionStatus: value,
+		errOut:          errOut,
+	}
+}
+
+func (w ConditionalWaiter) VisitResource(info *resource.Info, o *WaitOptions) (runtime.Object, bool, error) {
 	return getObjAndCheckCondition(info, o, w.isConditionMet, w.checkCondition)
 }
 
-func (w ConditionalWait) checkCondition(obj *unstructured.Unstructured) (bool, error) {
+func (w ConditionalWaiter) OnWaitLoopCompletion(visitedCount int, err error) error {
+	if visitedCount == 0 {
+		return errNoMatchingResources
+	} else {
+		return err
+	}
+}
+
+func (w ConditionalWaiter) checkCondition(obj *unstructured.Unstructured) (bool, error) {
 	conditions, found, err := unstructured.NestedSlice(obj.Object, "status", "conditions")
 	if err != nil {
 		return false, err
@@ -65,7 +70,7 @@ func (w ConditionalWait) checkCondition(obj *unstructured.Unstructured) (bool, e
 	return false, nil
 }
 
-func (w ConditionalWait) isConditionMet(event watch.Event) (bool, error) {
+func (w ConditionalWaiter) isConditionMet(event watch.Event) (bool, error) {
 	if event.Type == watch.Error {
 		// keep waiting in the event we see an error - we expect the watch to be closed by
 		// the server

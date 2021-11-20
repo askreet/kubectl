@@ -13,23 +13,29 @@ import (
 
 // A Waiter defines the behavior of waiting for the desired state, including configuration for the ResourceFinder used
 // during the operation.
-type Waiter struct {
-	// ConditionFunc is called once for each resource provided by ResourceFinder during the wait loop.
-	ConditionFn ConditionFunc
+type Waiter interface {
+	// VisitResource is called once for each resource found during the wait loop.
+	VisitResource(info *resource.Info, o *WaitOptions) (runtime.Object, bool, error)
+	//ConditionFunc is called once for each resource provided by ResourceFinder during the wait loop.
+	//ConditionFn ConditionFunc
+
+	// OnWaitLoopCompletion is called at the end of each wait loop cycle and may be used to supress or raise errors
+	// based on the number of resources visited.
+	OnWaitLoopCompletion(visitedCount int, err error) error
 
 	// IgnoreErrorFns specifies which errors are ignored by ResourceFinder prior to starting a wait loop.
-	IgnoreErrorFns []resource.ErrMatchFunc
+	//IgnoreErrorFns []resource.ErrMatchFunc
 
 	// If false, AllowNoResources will not immediately fail the wait loop if no resources match the query.
-	AllowNoResources bool
+	//AllowNoResources bool
 }
 
 // ConditionFunc is the interface for providing condition checks
 type ConditionFunc func(info *resource.Info, o *WaitOptions) (finalObject runtime.Object, done bool, err error)
 
-func waiterFor(condition string, errOut io.Writer) (*Waiter, error) {
+func waiterFor(condition string, errOut io.Writer) (Waiter, error) {
 	if strings.ToLower(condition) == "delete" {
-		return NewDeletionWaiter(), nil
+		return NewDeletionWaiter(errOut), nil
 	}
 	if strings.HasPrefix(condition, "condition=") {
 		conditionName := condition[len("condition="):]
